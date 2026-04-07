@@ -1,2 +1,3 @@
+5th iteration of my personal website :)
+
 To run: npm run dev
-To deploy: npm run deploy
