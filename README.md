@@ -1,3 +1,3 @@
-5th iteration of my personal website :)
+# Lucas' Personal Website
 
 To run: npm run dev
