@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --accent: #555555;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+    --accent: #a1a1a1;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+
+
+
+  .thin-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 999px;
+  }
+
+  .thin-scrollbar:hover::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+
+  .thin-scrollbar.is-scrolling::-webkit-scrollbar-thumb,
+  .thin-scrollbar.is-scrolling:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-accent), transparent 90%);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Hide default cursor everywhere so only custom cursor shows (pointer devices only) */
+@media (hover: hover) and (pointer: fine) {
+  html,
+  body,
+  body * {
+    cursor: none !important;
+  }
+}
+
+/* Apple-style grey transparent circle cursor */
+.cursor-dot {
+  background: rgba(128, 128, 128, 0.4);
+}
+@media (prefers-color-scheme: dark) {
+  .cursor-dot {
+    background: rgba(255, 255, 255, 0.35);
+  }
+}
+
+/* iPadOS-style pill: styles applied inline in CustomCursor for morph transition */
