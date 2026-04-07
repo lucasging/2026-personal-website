@@ -32,7 +32,7 @@ const ITEMS: Item[] = [
     id: "telus",
     title: "TELUS",
     subtitle: "Software Engineer",
-    date: "Jan 2026 - Present",
+    date: "Winter 2026",
     category: "work",
     description: "Supported an internal booking platform through test automation, cloud migration efforts, UI/UX ideation, and day-to-day maintenance to improve platform stability and usability.",
     image: "/telus.jpeg"
@@ -105,7 +105,7 @@ const ITEMS: Item[] = [
     id: "bucs-fighter",
     title: "BUCS Fighter",
     subtitle: "BUCS Hackathon Winner",
-    date: "2nd Place",
+    date: "2nd Place Overall",
     category: "projects",
     description: "BUCS Fighter is a real-time online arena fighter featuring fast, high-intensity matches. Built with an authoritative TypeScript backend, it delivers a competitive multiplayer experience designed for quick rounds and chaotic fun.",
     link: "https://devpost.com/software/bucs-fighter",
