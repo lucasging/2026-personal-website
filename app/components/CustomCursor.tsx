@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { flushSync } from "react-dom";
 
 const PAD = 0;
 const PAD_LINK = 2;
@@ -16,7 +17,79 @@ const EXIT_EASE = (t: number) => 1 - (1 - t) ** 2;
 function getPad(el: HTMLElement): number {
   if (el.classList.contains("nav-link")) return PAD_NAV_LINK;
   if (el.classList.contains("content-link")) return PAD_CONTENT_LINK;
+  if (el.classList.contains("detail-overlay-close")) return PAD_CONTENT_LINK;
   return el.tagName === "A" ? PAD_LINK : HIT_PADDING;
+}
+
+/** Padding for the hover pill (list row buttons stay tight at 0). */
+function getHoverPad(el: HTMLElement): number {
+  if (el.classList.contains("nav-link")) return PAD_NAV_LINK;
+  if (el.classList.contains("content-link")) return PAD_CONTENT_LINK;
+  if (el.classList.contains("detail-overlay-close")) return PAD_CONTENT_LINK;
+  return el.tagName === "A" ? PAD_LINK : PAD;
+}
+
+/** Avoid 0/0 → NaN and huge ratios → Infinity when multiplying by box size later. */
+function normAlongAxis(value: number, start: number, size: number, fallbackPct: number): number {
+  if (size > 0 && Number.isFinite(size)) {
+    const t = ((value - start) / size) * 100;
+    if (!Number.isFinite(t)) return fallbackPct;
+    return Math.min(100, Math.max(0, t));
+  }
+  return fallbackPct;
+}
+
+function normAlongAxis01(value: number, start: number, size: number): number {
+  if (size > 0 && Number.isFinite(size)) {
+    const t = (value - start) / size;
+    if (!Number.isFinite(t)) return 0.5;
+    return Math.min(1, Math.max(0, t));
+  }
+  return 0.5;
+}
+
+/** React rejects NaN/Infinity on pixel style props; keep values finite. */
+function cssPx(n: number): number {
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Mobile detail sheet: `elementFromPoint` alone is unreliable (SVG layers, stacking).
+ * Walk the hit-test stack so the X and CTA resolve to their button/link consistently.
+ */
+function tryDetailOverlayClickableAtPoint(
+  x: number,
+  y: number
+): { done: true; result: { element: HTMLElement | null; fromFallback: boolean } } | { done: false } {
+  const overlay = document.querySelector("[data-detail-overlay]");
+  if (!overlay) return { done: false };
+
+  const stack = document.elementsFromPoint(x, y);
+  let hitOverlay = false;
+
+  for (const node of stack) {
+    if (!(node instanceof Element)) continue;
+    if (!overlay.contains(node)) continue;
+    hitOverlay = true;
+
+    const clickable = node.closest<HTMLElement>("a, button, [role='button']");
+    if (!clickable || !overlay.contains(clickable)) continue;
+
+    const pad = getPad(clickable);
+    const r = clickable.getBoundingClientRect();
+    const left = r.left - pad;
+    const top = r.top - pad;
+    const width = r.width + pad * 2;
+    const height = r.height + pad * 2;
+    if (x >= left && x <= left + width && y >= top && y <= top + height) {
+      return { done: true, result: { element: clickable, fromFallback: false } };
+    }
+  }
+
+  if (hitOverlay) {
+    return { done: true, result: { element: null, fromFallback: false } };
+  }
+  return { done: false };
 }
 
 function getClickableAtPoint(
@@ -24,6 +97,11 @@ function getClickableAtPoint(
   y: number,
   lastHovered: HTMLElement | null
 ): { element: HTMLElement | null; fromFallback: boolean } {
+  const overlayPick = tryDetailOverlayClickableAtPoint(x, y);
+  if (overlayPick.done) {
+    return overlayPick.result;
+  }
+
   const topmost = document.elementFromPoint(x, y);
   if (lastHovered && topmost && lastHovered.contains(topmost)) {
     const r = lastHovered.getBoundingClientRect();
@@ -150,8 +228,31 @@ export function CustomCursor() {
   const exitFinalCenterRef = useRef<{ x: number; y: number } | null>(null);
   const posHoldUntilRef = useRef(0);
   const rafScheduledRef = useRef(false);
+  /** After interacting with overlay controls, block re-hovering them until the pointer moves. */
+  const detailOverlayHoverSuppressRef = useRef<{ x: number; y: number } | null>(null);
   const [circleSmoothExit, setCircleSmoothExit] = useState(false);
   const [circleScale, setCircleScale] = useState(1);
+
+  const resetHover = useCallback(() => {
+    hoveredRef.current = null;
+    hoveredFromFallbackRef.current = false;
+    isExitingRef.current = false;
+    exitStartRef.current = null;
+    exitFinalCenterRef.current = null;
+    posHoldUntilRef.current = 0;
+    rafScheduledRef.current = false;
+    hoverBoxRef.current = null;
+    setCircleSmoothExit(false);
+    setExitBox(null);
+    setHoverBox(null);
+    setMorphStart(null);
+    setPillExpanded(false);
+    setIsExiting(false);
+  }, []);
+
+  const clearDetailOverlaySuppress = useCallback(() => {
+    detailOverlayHoverSuppressRef.current = null;
+  }, []);
 
   posRef.current = pos;
   hoverBoxRef.current = hoverBox;
@@ -163,19 +264,36 @@ export function CustomCursor() {
   }
 
   const updateAt = useCallback((x: number, y: number) => {
+    // If the previously-hovered element got unmounted (e.g. closing the mobile overlay),
+    // clear hover state so we don't animate from a stale rect and "fly off".
+    if (hoveredRef.current && !hoveredRef.current.isConnected) {
+      resetHover();
+    }
+
+    // After reset on overlay link/button, the next updateAt still sees the CTA under the cursor
+    // and would re-expand the pill unless we ignore that until the pointer moves.
+    const sup = detailOverlayHoverSuppressRef.current;
+    if (sup) {
+      const dx = x - sup.x;
+      const dy = y - sup.y;
+      if (dx * dx + dy * dy >= 64) {
+        detailOverlayHoverSuppressRef.current = null;
+      } else {
+        const probe = getClickableAtPoint(x, y, hoveredRef.current);
+        const el = probe.element;
+        if (el && el.closest("[data-detail-overlay]")) {
+          return;
+        }
+      }
+    }
+
     const { element: clickable, fromFallback } = getClickableAtPoint(x, y, hoveredRef.current);
     if (clickable) {
       hoveredFromFallbackRef.current = fromFallback;
       isExitingRef.current = false;
       setIsExiting(false);
       const r = clickable.getBoundingClientRect();
-      const pad = clickable.classList.contains("nav-link")
-        ? PAD_NAV_LINK
-        : clickable.classList.contains("content-link")
-          ? PAD_CONTENT_LINK
-          : clickable.tagName === "A"
-            ? PAD_LINK
-            : PAD;
+      const pad = getHoverPad(clickable);
       const box = {
         left: r.left - pad,
         top: r.top - pad,
@@ -186,8 +304,8 @@ export function CustomCursor() {
       const isNew = hoveredRef.current !== clickable;
       if (isNew) {
         hoveredRef.current = clickable;
-        const px = ((x - box.left) / box.width) * 100;
-        const py = ((y - box.top) / box.height) * 100;
+        const px = normAlongAxis(x, box.left, box.width, 50);
+        const py = normAlongAxis(y, box.top, box.height, 50);
         setOrigin({ x: px, y: py });
         if (!wasOverSomething) {
           setMorphStart({
@@ -215,8 +333,8 @@ export function CustomCursor() {
         const box = hoverBoxRef.current;
         isExitingRef.current = true;
         exitOriginRef.current = {
-          fx: (x - box.left) / box.width,
-          fy: (y - box.top) / box.height,
+          fx: normAlongAxis01(x, box.left, box.width),
+          fy: normAlongAxis01(y, box.top, box.height),
         };
         exitStartRef.current = {
           width: box.width,
@@ -231,7 +349,7 @@ export function CustomCursor() {
         setIsExiting(true);
       }
     }
-  }, []);
+  }, [resetHover]);
 
   const updateCursor = useCallback(
     (e: MouseEvent) => {
@@ -324,6 +442,7 @@ export function CustomCursor() {
 
   useEffect(() => {
     const onLeave = () => {
+      detailOverlayHoverSuppressRef.current = null;
       setVisible(false);
       isExitingRef.current = false;
       exitStartRef.current = null;
@@ -350,6 +469,9 @@ export function CustomCursor() {
 
   useEffect(() => {
     const onCaptureClick = (e: MouseEvent) => {
+      const targetEl = e.target instanceof Element ? e.target : null;
+      // Never hijack clicks inside the detail overlay (e.g. the close button).
+      if (targetEl?.closest("[data-detail-overlay]")) return;
       const hovered = hoveredRef.current;
       if (!hovered || !hoveredFromFallbackRef.current) return;
       const target = e.target as Node;
@@ -361,6 +483,61 @@ export function CustomCursor() {
     document.documentElement.addEventListener("click", onCaptureClick, true);
     return () => document.documentElement.removeEventListener("click", onCaptureClick, true);
   }, []);
+
+  useEffect(() => {
+    const onOverlayPointerDown = (e: PointerEvent | MouseEvent) => {
+      const targetEl = e.target instanceof Element ? e.target : null;
+      const overlay = targetEl?.closest("[data-detail-overlay]");
+      if (!overlay) return;
+
+      const clicked = targetEl?.closest<HTMLElement>("a, button, [role='button']");
+      if (!clicked || !overlay.contains(clicked)) return;
+
+      // Commit hover reset synchronously, then suppress re-hovering the same
+      // overlay control until the pointer moves (otherwise the next updateAt
+      // immediately re-selects the link under the cursor).
+      flushSync(() => {
+        resetHover();
+      });
+      detailOverlayHoverSuppressRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    document.documentElement.addEventListener("pointerdown", onOverlayPointerDown as EventListener, true);
+    return () => {
+      document.documentElement.removeEventListener("pointerdown", onOverlayPointerDown as EventListener, true);
+    };
+  }, [resetHover]);
+
+  useEffect(() => {
+    const onResetOnPress = (e: PointerEvent) => {
+      // Only when “mobile” layout (< md): desktop should keep the pill on the selected row.
+      if (window.matchMedia("(min-width: 768px)").matches) return;
+      const targetEl = e.target instanceof Element ? e.target : null;
+      if (!targetEl) return;
+      if (targetEl.closest("[data-detail-overlay]")) return;
+      const trigger = targetEl.closest(".cursor-reset-on-press");
+      if (!trigger) return;
+
+      flushSync(() => {
+        resetHover();
+      });
+      detailOverlayHoverSuppressRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    document.documentElement.addEventListener("pointerdown", onResetOnPress as EventListener, true);
+    return () => {
+      document.documentElement.removeEventListener("pointerdown", onResetOnPress as EventListener, true);
+    };
+  }, [resetHover]);
+
+  useEffect(() => {
+    const onReset = () => {
+      clearDetailOverlaySuppress();
+      resetHover();
+    };
+    window.addEventListener("customcursor:reset", onReset as EventListener);
+    return () => window.removeEventListener("customcursor:reset", onReset as EventListener);
+  }, [resetHover, clearDetailOverlaySuppress]);
 
   useEffect(() => {
     const sync = () => {
@@ -382,13 +559,7 @@ export function CustomCursor() {
     const ro = new ResizeObserver(() => {
       if (isExitingRef.current || hoveredRef.current !== el) return;
       const r = el.getBoundingClientRect();
-      const pad = el.classList.contains("nav-link")
-        ? PAD_NAV_LINK
-        : el.classList.contains("content-link")
-          ? PAD_CONTENT_LINK
-          : el.tagName === "A"
-            ? PAD_LINK
-            : PAD;
+      const pad = getHoverPad(el);
       setHoverBox({
         left: r.left - pad,
         top: r.top - pad,
@@ -425,20 +596,24 @@ export function CustomCursor() {
 
       {(hoverBox || isExiting) && (pillExpanded || morphStart || isExiting) && (!isExiting || exitBox) && (
         <div
-          className="pointer-events-none fixed z-[9998]"
+          className="pointer-events-none fixed z-[2147483646]"
           style={{
-            left: isExiting
-              ? pos.x - exitOriginRef.current.fx * exitBox!.width
-              : pillExpanded
-                ? hoverBox!.left
-                : morphStart!.left,
-            top: isExiting
-              ? pos.y - exitOriginRef.current.fy * exitBox!.height
-              : pillExpanded
-                ? hoverBox!.top
-                : morphStart!.top,
-            width: isExiting ? exitBox!.width : pillExpanded ? hoverBox!.width : morphStart!.width,
-            height: isExiting ? exitBox!.height : pillExpanded ? hoverBox!.height : morphStart!.height,
+            left: cssPx(
+              isExiting
+                ? pos.x - exitOriginRef.current.fx * exitBox!.width
+                : pillExpanded
+                  ? hoverBox!.left
+                  : morphStart!.left
+            ),
+            top: cssPx(
+              isExiting
+                ? pos.y - exitOriginRef.current.fy * exitBox!.height
+                : pillExpanded
+                  ? hoverBox!.top
+                  : morphStart!.top
+            ),
+            width: cssPx(isExiting ? exitBox!.width : pillExpanded ? hoverBox!.width : morphStart!.width),
+            height: cssPx(isExiting ? exitBox!.height : pillExpanded ? hoverBox!.height : morphStart!.height),
             borderRadius: isExiting ? exitBox!.borderRadius : pillExpanded ? PILL_RADIUS : 50,
             background: dark
               ? "rgba(255, 255, 255, 0.08)"

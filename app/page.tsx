@@ -158,7 +158,10 @@ export default function Home() {
     setSelectedItemId(id === selectedItemId ? null : id);
   };
 
-  const closeOverlay = () => setSelectedItemId(null);
+  const closeOverlay = () => {
+    window.dispatchEvent(new Event("customcursor:reset"));
+    setSelectedItemId(null);
+  };
 
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -191,7 +194,7 @@ export default function Home() {
         />
         <div className="absolute inset-0 bg-black/10"></div>
       </div>
-      <p className="mt-8 text-zinc-400 font-light tracking-wide uppercase text-[12px]">
+      <p className="mt-8 text-zinc-400 font-light tracking-wide uppercase text-[14px] md:text-[12px]">
         Select an item for more details
       </p>
     </div>
@@ -202,6 +205,7 @@ export default function Home() {
 
       const target = event.target as HTMLElement;
 
+      if (target.closest("[data-detail-overlay]")) return;
       if (!target.closest('button') && !target.closest('a') && !target.closest('.md\\:col-span-6:last-child')) {
         setSelectedItemId(null);
       }
@@ -218,13 +222,25 @@ export default function Home() {
 
       {/* mobile */}
       {isMobile && selectedItem && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col p-8 animate-in slide-in-from-bottom-10 duration-300">
+        <div
+          data-detail-overlay
+          className="fixed inset-0 z-[10000] bg-background flex flex-col p-8 animate-in slide-in-from-bottom-10 duration-300"
+        >
           <button
+            type="button"
             onClick={closeOverlay}
-            className="self-end p-2 -mr-2 text-zinc-500 hover:text-foreground transition-colors"
+            className="detail-overlay-close touch-manipulation self-end rounded-md p-2 -mr-2 text-zinc-500 transition-colors hover:text-foreground active:bg-zinc-100 active:text-foreground dark:active:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-zinc-600"
             aria-label="Close details"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="pointer-events-none w-6 h-6"
+              aria-hidden
+            >
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -242,27 +258,40 @@ export default function Home() {
                 </div>
               )}
               <div>
-                <span className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400 border border-zinc-200 dark:border-zinc-800 px-1.5 py-0.5 rounded-sm">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 border border-zinc-200 dark:border-zinc-800 px-1.5 py-0.5 rounded-sm">
                   {selectedItem.category}
                 </span>
-                <h2 className="text-[12px] font-bold mt-4 tracking-tight uppercase">{selectedItem.title}</h2>
+                <h2 className="text-[14px] font-bold mt-4 tracking-tight uppercase">{selectedItem.title}</h2>
                 {selectedItem.subtitle && (
-                  <p className="text-[12px] text-zinc-500 mt-1 font-normal">{selectedItem.subtitle}</p>
+                  <p className="text-[14px] text-zinc-500 mt-1 font-normal">{selectedItem.subtitle}</p>
                 )}
                 {selectedItem.date && (
-                  <p className="text-[10px] text-zinc-400 mt-1 font-light">{selectedItem.date}</p>
+                  <p className="text-[12px] text-zinc-400 mt-1 font-light">{selectedItem.date}</p>
                 )}
               </div>
 
-              <p className="text-[12px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+              <p className="text-[14px] leading-relaxed text-zinc-600 dark:text-zinc-300">
                 {selectedItem.description}
               </p>
 
               {selectedItem.link && (
                 <div className="pt-4">
-                  <a href={selectedItem.link} target="_blank" rel="noopener noreferrer" className="content-link inline-flex items-center text-[12px] font-medium border-b border-foreground pb-0.5 hover:opacity-70 transition-opacity">
+                  <a
+                    href={selectedItem.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="content-link detail-overlay-cta touch-manipulation inline-flex items-center rounded-sm text-[14px] font-medium border-b border-foreground pb-0.5 transition-opacity hover:opacity-70 active:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background dark:focus-visible:ring-zinc-600"
+                  >
                     {selectedItem.linkText || "View Project"}
-                    <svg className="w-3 h-3 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+                    <svg
+                      className="pointer-events-none w-3 h-3 ml-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
                   </a>
                 </div>
               )}
@@ -282,8 +311,8 @@ export default function Home() {
             <div className="flex flex-col gap-10 my-auto">
 
               <header className="space-y-2">
-                <h1 className="text-[12px] font-bold tracking-tight uppercase">Lucas Gingera</h1>
-                <div className="space-y-0.5 text-[12px] text-zinc-500 dark:text-zinc-400">
+                <h1 className="text-[14px] md:text-[12px] font-bold tracking-tight uppercase">Lucas Gingera</h1>
+                <div className="space-y-0.5 text-[14px] md:text-[12px] text-zinc-500 dark:text-zinc-400">
                   <p>Product Manager & Software Engineer</p>
                   <p className="pt-1 text-zinc-400">Business + Computer Science @ UBC</p>
                 </div>
@@ -292,7 +321,7 @@ export default function Home() {
               <nav className="space-y-8">
                 {["work", "leadership", "projects"].map((category) => (
                   <section key={category}>
-                    <h2 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-400 mb-2 dark:text-zinc-500">
+                    <h2 className="text-[14px] md:text-[12px] font-semibold uppercase tracking-wider text-zinc-400 mb-2 dark:text-zinc-500">
                       {category}
                     </h2>
                     <ul className="space-y-0">
@@ -303,19 +332,19 @@ export default function Home() {
                               e.stopPropagation();
                               handleItemClick(item.id, item.category!);
                             }}
-                            className={`w-full text-left cursor-pointer transition-all duration-300
+                            className={`cursor-reset-on-press w-full text-left cursor-pointer transition-all duration-300
                               ${selectedItemId === item.id
                                 ? "bg-zinc-100 dark:bg-zinc-900 text-foreground py-1 px-2 -mx-2 rounded-[8px]"
                                 : "text-zinc-500 dark:text-zinc-400 py-1 px-2 -mx-2 rounded-md"
                               }
                             `}
                           >
-                            <span className="flex items-center justify-between text-[12px]">
+                            <span className="flex items-center justify-between text-[14px] md:text-[12px]">
                               <span className={selectedItemId === item.id ? "font-medium" : "font-normal"}>
                                 {item.title}
                               </span>
                               {item.subtitle && (
-                                <span className="text-[10px] text-zinc-400 font-normal ml-2 opacity-80">
+                                <span className="text-[12px] md:text-[10px] text-zinc-400 font-normal ml-2 opacity-80">
                                   {item.subtitle}
                                 </span>
                               )}
@@ -328,10 +357,10 @@ export default function Home() {
                 ))}
 
                 <section> {/* links */}
-                  <h2 className="text-[12px] font-semibold uppercase tracking-wider text-zinc-400 mb-2 dark:text-zinc-500">
+                  <h2 className="text-[14px] md:text-[12px] font-semibold uppercase tracking-wider text-zinc-400 mb-2 dark:text-zinc-500">
                     Links
                   </h2>
-                  <ul className="flex flex-wrap gap-2 text-[12px] text-zinc-600 dark:text-zinc-400">
+                  <ul className="flex flex-wrap gap-2 text-[14px] md:text-[12px] text-zinc-600 dark:text-zinc-400">
                     <li><a href="https://linkedin.com/in/lucasgingera" target="_blank" rel="noopener noreferrer" className="nav-link inline-block -mx-1 px-1 py-0.5 underline decoration-zinc-300 underline-offset-4 decoration-1 transition-all">LinkedIn</a></li>
                     <li><a href="https://github.com/lucasging" target="_blank" rel="noopener noreferrer" className="nav-link inline-block -mx-1 px-1 py-0.5 underline decoration-zinc-300 underline-offset-4 decoration-1 transition-all">GitHub</a></li>
                     <li>
