@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "pages:build": "NPM_CONFIG_LEGACY_PEER_DEPS=true npx @cloudflare/next-on-pages",
-    "deploy": "npm run pages:build && wrangler pages deploy"
+    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
+    "deploy:production": "npm run pages:build && wrangler pages deploy .vercel/output/static --branch 2026-website"
   },
   "dependencies": {
     "next": "16.1.4",
