@@ -62,10 +62,10 @@ const ITEMS: Item[] = [
     subtitle: "Co-President",
     date: "2024-2026",
     category: "leadership",
-    description: "Leading the largest tech student organization at UBC with 7 teams, 48 executives and 750+ members. Previously Media Director.",
+    description: "Led the largest tech student organization at UBC with 7 teams, 48 executives and 880+ members. Previously Media Director.",
     link: "https://ubcbiztech.com",
     linkText: "More about UBC BizTech",
-    image: "/biztech.jpg"
+    image: "/biztech.jpeg"
   },
   {
     id: "nwplus",
