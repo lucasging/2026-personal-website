@@ -224,6 +224,7 @@ export function CustomCursor() {
   const hoverBoxRef = useRef<typeof hoverBox>(null);
   const posRef = useRef({ x: 0, y: 0 });
   const exitOriginRef = useRef({ fx: 0.5, fy: 0.5 });
+  const exitOriginStartRef = useRef({ fx: 0.5, fy: 0.5 });
   const exitStartRef = useRef<{ width: number; height: number; startTime: number } | null>(null);
   const exitFinalCenterRef = useRef<{ x: number; y: number } | null>(null);
   const posHoldUntilRef = useRef(0);
@@ -332,10 +333,10 @@ export function CustomCursor() {
       if (hoverBoxRef.current !== null && !isExitingRef.current) {
         const box = hoverBoxRef.current;
         isExitingRef.current = true;
-        exitOriginRef.current = {
-          fx: normAlongAxis01(x, box.left, box.width),
-          fy: normAlongAxis01(y, box.top, box.height),
-        };
+        const exitFx = normAlongAxis01(x, box.left, box.width);
+        const exitFy = normAlongAxis01(y, box.top, box.height);
+        exitOriginRef.current = { fx: exitFx, fy: exitFy };
+        exitOriginStartRef.current = { fx: exitFx, fy: exitFy };
         exitStartRef.current = {
           width: box.width,
           height: box.height,
@@ -393,7 +394,9 @@ export function CustomCursor() {
       setPos(center);
       exitFinalCenterRef.current = null;
     }
-    posHoldUntilRef.current = performance.now() + 32;
+    // No position freeze here: the follower now tracks the cursor instantly
+    // (position is on a non-transitioned element), so holding pos would only
+    // cause a brief stick-then-snap.
     setCircleScale(0.82);
     setCircleSmoothExit(true);
     isExitingRef.current = false;
@@ -425,6 +428,14 @@ export function CustomCursor() {
       const elapsed = performance.now() - start.startTime;
       const t = Math.min(1, elapsed / EXIT_DURATION_MS);
       const eased = EXIT_EASE(t);
+      // Drift the anchor toward the box center as it shrinks so the pill collapses
+      // into a dot centered under the cursor. This keeps the handoff to the circle
+      // continuous instead of snapping from an edge-anchored collapse point.
+      const { fx: fx0, fy: fy0 } = exitOriginStartRef.current;
+      exitOriginRef.current = {
+        fx: fx0 + (0.5 - fx0) * eased,
+        fy: fy0 + (0.5 - fy0) * eased,
+      };
       setExitBox({
         width: start.width + (20 - start.width) * eased,
         height: start.height + (20 - start.height) * eased,
@@ -578,20 +589,30 @@ export function CustomCursor() {
   return (
     <>
       {showCircle && (
+        // Outer element owns the POSITION only, with no transition, so the dot
+        // tracks the cursor instantly. The scale "settle" lives on the inner
+        // element so its transition can never ease the position (which would make
+        // the dot glide toward the cursor after an exit — the old jump/lag).
         <div
           className="pointer-events-none fixed left-0 top-0 z-[2147483647] will-change-transform"
           style={{
-            transform: `translate3d(${pos.x}px, ${pos.y}px, 0) translate(-50%, -50%) scale(${circleScale})`,
-            width: 20,
-            height: 20,
-            borderRadius: "50%",
-            background: dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
-            transition: circleSmoothExit
-              ? "transform 0.15s cubic-bezier(0.2, 0, 0, 1), opacity 0.2s ease-out"
-              : "opacity 0.2s ease-out",
+            transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
           }}
           aria-hidden
-        />
+        >
+          <div
+            style={{
+              transform: `translate(-50%, -50%) scale(${circleScale})`,
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: dark ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.1)",
+              transition: circleSmoothExit
+                ? "transform 0.15s cubic-bezier(0.2, 0, 0, 1)"
+                : "none",
+            }}
+          />
+        </div>
       )}
 
       {(hoverBox || isExiting) && (pillExpanded || morphStart || isExiting) && (!isExiting || exitBox) && (
