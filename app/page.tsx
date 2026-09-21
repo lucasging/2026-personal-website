@@ -25,7 +25,7 @@ const ITEMS: Item[] = [
     subtitle: "Product Manager",
     date: "Summer 2026",
     category: "work",
-    description: "Incoming Product Manager at Microsoft Security in Redmond, WA. Updates to follow.",
+    description: "Built AI-powered security tooling by automating release readiness workflows, surfacing documentation, and standardizing observability across AI products to improve efficiency and reliability.",
     image: "/microsoft.jpeg"
   },
   {
